@@ -1,0 +1,39 @@
+name: Telegram Notify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "reports/*.md"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get changed report file
+        id: report
+        run: |
+          FILE=$(git diff --name-only HEAD~1 HEAD -- 'reports/*.md' | head -n1)
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Send to Telegram
+        if: steps.report.outputs.file != ''
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          REPORT=$(cat "${{ steps.report.outputs.file }}")
+          MAX=4000
+          START=0
+          LEN=${#REPORT}
+          while [ $START -lt $LEN ]; do
+            CHUNK="${REPORT:$START:$MAX}"
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${CHAT_ID}" \
+              --data-urlencode "text=${CHUNK}"
+            START=$((START + MAX))
+          done
